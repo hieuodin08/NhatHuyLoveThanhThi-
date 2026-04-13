@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Snake 3D Realistic</title>
+<style>
+  body { margin:0; overflow:hidden; }
+  #ui { position:absolute; top:10px; left:10px; color:#fff; font-family:Arial; }
+  #restart { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); display:none; }
+</style>
+</head>
+<body>
+<div id="ui">Score: <span id="score">0</span></div>
+<button id="restart">Chơi lại</button>
+
+<!-- SOUND -->
+<audio id="eat1" src="yes_sound_effect-www_tiengdong_com.mp3"></audio>
+<audio id="eat2" src="tieng_cuoi_Do_mixi-www_tiengdong_com.mp3"></audio>
+<audio id="eat3" src="ban_thi_kinh_roi_Do_mixi-www_tiengdong_com.mp3"></audio>
+
+<audio id="fail1" src="Am_thanh_meme_sao_may_ngu_the_ha-www_tiengdong_com.mp3"></audio>
+<audio id="fail2" src="Do_ngu_Do_an_hai-www_tiengdong_com.mp3"></audio>
+<audio id="fail3" src="cay_e_leu_leu_cay_Do_mixi-www_tiengdong_com.mp3"></audio>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script>
+let gameOver = false;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// ☀️ SUN
+const sun = new THREE.Mesh(
+  new THREE.SphereGeometry(5,32,32),
+  new THREE.MeshBasicMaterial({color:0xffff00})
+);
+sun.position.set(30,50,-50);
+scene.add(sun);
+
+// LIGHT
+scene.add(new THREE.AmbientLight(0xffffff,0.6));
+const light = new THREE.DirectionalLight(0xffffff,1);
+light.position.set(30,50,-50);
+scene.add(light);
+
+// MAP
+const MAP_SIZE = 50;
+const grid = new THREE.GridHelper(MAP_SIZE, MAP_SIZE);
+scene.add(grid);
+
+// WALL LOW
+function createWall(x,z){
+  const w = new THREE.Mesh(new THREE.BoxGeometry(1,0.5,1), new THREE.MeshStandardMaterial({color:0x888888}));
+  w.position.set(x,0.25,z);
+  scene.add(w);
+}
+for(let i=-MAP_SIZE/2;i<MAP_SIZE/2;i++){
+  createWall(i,-MAP_SIZE/2);
+  createWall(i,MAP_SIZE/2-1);
+  createWall(-MAP_SIZE/2,i);
+  createWall(MAP_SIZE/2-1,i);
+}
+
+// 🐍 REALISTIC SNAKE
+let snake=[];
+const bodyGeo = new THREE.CylinderGeometry(0.4,0.5,1,12);
+
+function createSegment(x,z){
+  const mat = new THREE.MeshStandardMaterial({color:0x228b22});
+  const seg = new THREE.Mesh(bodyGeo,mat);
+  seg.rotation.z = Math.PI/2;
+  seg.position.set(x,0.5,z);
+  scene.add(seg);
+  return seg;
+}
+
+const head = new THREE.Mesh(
+  new THREE.SphereGeometry(0.6,16,16),
+  new THREE.MeshStandardMaterial({color:0x2ecc71})
+);
+head.position.set(0,0.6,0);
+scene.add(head);
+snake.push(head);
+
+// eyes
+const eyeGeo = new THREE.SphereGeometry(0.1);
+const eyeMat = new THREE.MeshBasicMaterial({color:0x000000});
+const eye1 = new THREE.Mesh(eyeGeo,eyeMat);
+const eye2 = new THREE.Mesh(eyeGeo,eyeMat);
+eye1.position.set(-0.2,0.2,0.4);
+eye2.position.set(0.2,0.2,0.4);
+head.add(eye1);
+head.add(eye2);
+
+// 🍏 GOLDEN APPLE (Minecraft style simple)
+const food = new THREE.Mesh(
+  new THREE.SphereGeometry(0.7,16,16),
+  new THREE.MeshStandardMaterial({color:0xffd700, emissive:0xffd700})
+);
+scene.add(food);
+
+function spawnFood(){
+  food.position.set(
+    Math.floor(Math.random()*(MAP_SIZE-2)-(MAP_SIZE/2-1)),
+    0.6,
+    Math.floor(Math.random()*(MAP_SIZE-2)-(MAP_SIZE/2-1))
+  );
+}
+spawnFood();
+
+// CONTROL
+let dir = new THREE.Vector3(1,0,0);
+let speed = 0.15;
+let score = 0;
+window.addEventListener("keydown",e=>{
+  if(e.key==='w') dir.set(0,0,-1);
+  if(e.key==='s') dir.set(0,0,1);
+  if(e.key==='a') dir.set(-1,0,0);
+  if(e.key==='d') dir.set(1,0,0);
+});
+
+const eatSounds = [
+  document.getElementById("eat1"),
+  document.getElementById("eat2"),
+  document.getElementById("eat3")
+];
+const failSounds = [
+  document.getElementById("fail1"),
+  document.getElementById("fail2"),
+  document.getElementById("fail3")
+];
+
+function playSound(list){
+  const s = list[Math.floor(Math.random()*list.length)].cloneNode();
+  s.play();
+}
+
+// EFFECT
+function boom(pos){
+  const g = new THREE.Group();
+  for(let i=0;i<15;i++){
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({color:0xffaa00}));
+    p.position.copy(pos);
+    p.userData.vel = new THREE.Vector3((Math.random()-0.5)*0.5,Math.random()*0.5,(Math.random()-0.5)*0.5);
+    g.add(p);
+  }
+  scene.add(g);
+  const interval = setInterval(()=>g.children.forEach(p=>p.position.add(p.userData.vel)),16);
+  setTimeout(()=>{clearInterval(interval); scene.remove(g);},400);
+}
+
+const restartBtn = document.getElementById("restart");
+restartBtn.onclick = ()=>location.reload();
+
+function update(){
+  if(gameOver) return;
+
+  const move = dir.clone().multiplyScalar(speed);
+  const newPos = snake[0].position.clone().add(move);
+
+  if(newPos.x <= -MAP_SIZE/2 || newPos.x >= MAP_SIZE/2-1 || newPos.z <= -MAP_SIZE/2 || newPos.z >= MAP_SIZE/2-1){
+    gameOver = true;
+    playSound(failSounds);
+    restartBtn.style.display='block';
+    return;
+  }
+
+  for(let i=snake.length-1;i>0;i--){
+    snake[i].position.lerp(snake[i-1].position,0.5);
+  }
+
+  snake[0].position.copy(newPos);
+
+  if(newPos.distanceTo(food.position)<1){
+    snake.push(createSegment(newPos.x,newPos.z));
+    spawnFood();
+    score++;
+    document.getElementById("score").innerText=score;
+    boom(newPos);
+    playSound(eatSounds);
+    speed+=0.005;
+  }
+
+  camera.position.lerp(new THREE.Vector3(newPos.x,6,newPos.z+12),0.1);
+  camera.lookAt(newPos);
+
+  food.rotation.y +=0.05;
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  update();
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
